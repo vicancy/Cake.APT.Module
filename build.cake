@@ -1,0 +1,196 @@
+#tool "nuget:?package=GitVersion.CommandLine"
+#load "helpers.cake"
+#tool nuget:?package=docfx.console
+#addin nuget:?package=Cake.DocFx
+
+///////////////////////////////////////////////////////////////////////////////
+// ARGUMENTS
+///////////////////////////////////////////////////////////////////////////////
+
+var target = Argument("target", "Default");
+var configuration = Argument("configuration", "Release");
+var frameworkTargets = Argument("frameworks", "netstandard1.6,net45");
+
+///////////////////////////////////////////////////////////////////////////////
+// GLOBAL VARIABLES
+///////////////////////////////////////////////////////////////////////////////
+
+var solutionPath = File("./src/Cake.APT.Module.sln");
+var projects = GetProjects(solutionPath, configuration);
+var artifacts = "./dist/";
+var testResultsPath = MakeAbsolute(Directory(artifacts + "./test-results"));
+GitVersion versionInfo = null;
+var frameworks = frameworkTargets.Split(',').ToList();
+
+///////////////////////////////////////////////////////////////////////////////
+// SETUP / TEARDOWN
+///////////////////////////////////////////////////////////////////////////////
+
+Setup(ctx =>
+{
+	// Executed BEFORE the first task.
+	Information("Running tasks...");
+	versionInfo = GitVersion();
+	Information("Building for version {0}", versionInfo.FullSemVer);
+	Verbose("Building for " + string.Join(", ", frameworks));
+});
+
+Teardown(ctx =>
+{
+	// Executed AFTER the last task.
+	Information("Finished running tasks.");
+});
+
+///////////////////////////////////////////////////////////////////////////////
+// TASK DEFINITIONS
+///////////////////////////////////////////////////////////////////////////////
+
+Task("Clean")
+	.Does(() =>
+{
+	// Clean solution directories.
+	foreach(var path in projects.AllProjectPaths)
+	{
+		Information("Cleaning {0}", path);
+		CleanDirectories(path + "/**/bin/" + configuration);
+		CleanDirectories(path + "/**/obj/" + configuration);
+	}
+	Information("Cleaning common files...");
+	CleanDirectory(artifacts);
+});
+
+Task("Restore")
+	.Does(() =>
+{
+	// Restore all NuGet packages.
+	Information("Restoring solution...");
+	//NuGetRestore(solutionPath);
+	foreach (var project in projects.AllProjectPaths) {
+		DotNetCoreRestore(project.FullPath);
+	}
+});
+
+Task("Build")
+	.IsDependentOn("Clean")
+	.IsDependentOn("Restore")
+	.Does(() =>
+{
+	Information("Building solution...");
+	foreach(var framework in frameworks) {
+		foreach (var project in projects.SourceProjectPaths) {
+			var settings = new DotNetCoreBuildSettings {
+				Framework = framework,
+				Configuration = configuration,
+				NoIncremental = true,
+			};
+			DotNetCoreBuild(project.FullPath, settings);
+		}
+	}
+	
+});
+
+Task("Run-Unit-Tests")
+	.IsDependentOn("Build")
+	.Does(() =>
+{
+	if (projects.TestProjects.Any()) {
+		CreateDirectory(testResultsPath);
+
+		/*var settings = new XUnit2Settings {
+			NoAppDomain = true,
+			XmlReport = true,
+			HtmlReport = true,
+			OutputDirectory = testResultsPath,
+		};
+		settings.ExcludeTrait("Category", "Integration"); */
+
+		var settings = new DotNetCoreTestSettings {
+			Configuration = configuration,
+			//ArgumentCustomization = args => args.AppendSwitchQuoted("--logger", "trx;LogFilePath=" + testResultsPath + "tests.trx")
+		};
+
+		//XUnit2(testAssemblies, settings);
+		foreach(var project in projects.TestProjects) {
+			DotNetCoreTest(project.Path.FullPath, settings);
+		}
+	}
+});
+
+Task("Generate-Docs").Does(() => {
+	DocFxBuild("./docfx/docfx.json");
+	Zip("./docfx/_site/", artifacts + "/docfx.zip");
+});
+
+Task("Post-Build")
+	.IsDependentOn("Build")
+	.IsDependentOn("Run-Unit-Tests")
+	.IsDependentOn("Generate-Docs")
+	.Does(() =>
+{
+	CreateDirectory(artifacts + "build");
+	CreateDirectory(artifacts + "modules");
+	foreach (var project in projects.SourceProjects) {
+		CreateDirectory(artifacts + "build/" + project.Name);
+		foreach (var framework in frameworks) {
+			var frameworkDir = artifacts + "build/" + project.Name + "/" + framework;
+			CreateDirectory(frameworkDir);
+			var files = GetFiles(project.Path.GetDirectory() + "/bin/" + configuration + "/" + framework + "/" + project.Name +".*");
+			CopyFiles(files, frameworkDir);
+		}
+	}
+});
+
+Task("Pack")
+	.IsDependentOn("Post-Build")
+	.Does(() =>
+{
+	CreateDirectory(artifacts + "/package");
+	foreach(var project in projects.SourceProjects)
+    {
+        Information("\nPacking {0}...", project.Name);
+        DotNetCorePack(project.Path.FullPath, new DotNetCorePackSettings 
+        {
+            Configuration = configuration,
+            OutputDirectory = artifacts + "/package/",
+            NoBuild = true,
+            Verbose = false,
+            ArgumentCustomization = args => args
+                .Append("--include-symbols --include-source")
+        });
+    }
+});
+
+Task("NuGet")
+	.IsDependentOn("Post-Build")
+	.Does(() => 
+{
+	CreateDirectory(artifacts + "package");
+	Information("Building NuGet package");
+	var versionNotes = ParseAllReleaseNotes("./ReleaseNotes.md").FirstOrDefault(v => v.Version.ToString() == versionInfo.MajorMinorPatch);
+	var content = GetContent(frameworks, projects, configuration);
+	var settings = new NuGetPackSettings {
+		Id				= "Cake.APT.Module",
+		Version			= versionInfo.NuGetVersionV2,
+		Title			= "Cake APT Module",
+		Authors		 	= new[] { "Alistair Chapman" },
+		Owners			= new[] { "achapman", "cake-contrib" },
+		Description		= "This Cake module adds support for the APT package manager when installing tools in your Cake build scripts.",
+		ReleaseNotes	= versionNotes != null ? versionNotes.Notes.ToList() : new List<string>(),
+		Summary			= "Adds APT support to Cake builds.",
+		ProjectUrl		= new Uri("https://github.com/agc93/Cake.APT.Module"),
+		IconUrl			= new Uri("https://cakeresources.blob.core.windows.net/nuget/128/package-128.png"),
+		LicenseUrl		= new Uri("https://raw.githubusercontent.com/agc93/Cake.APT.Module/master/LICENSE"),
+		Copyright		= "Alistair Chapman 2017",
+		Tags			= new[] { "cake", "build", "ci", "build", "apt", "linux", "debian", "ubuntu" },
+		OutputDirectory = artifacts + "/package",
+		Files			= content,
+		//KeepTemporaryNuSpecFile = true
+	};
+
+	NuGetPack(settings);
+});
+
+Task("Default")
+	.IsDependentOn("Post-Build");
+
+RunTarget(target);
