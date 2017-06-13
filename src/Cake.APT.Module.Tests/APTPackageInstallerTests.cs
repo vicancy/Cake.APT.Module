@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Cake.Core.Packaging;
 using NSubstitute;
 using Xunit;
@@ -166,7 +167,7 @@ namespace Cake.APT.Module.Tests
                 Assert.Equal("package", ((ArgumentNullException)result).ParamName);
             }
 
-            
+
             ///<summary>
             /// This test is the inverse of the normal one since the install path is ignored.
             ///</summary>
@@ -185,6 +186,61 @@ namespace Cake.APT.Module.Tests
 
                 // Then
                 Assert.Null(result);
+            }
+        }
+
+        public sealed class TheGetArgumentsMethod
+        {
+            [Fact]
+            public void Should_Use_Yes_Flag()
+            {
+                // Given
+                var fixture = new APTPackageInstallerFixture();
+
+                // When
+                var result = fixture.GetArguments().Render();
+
+                // Then
+                Assert.Equal("install -y xcowsay", result);
+            }
+
+            [Fact]
+            public void Should_Use_Dist_Flag() {
+                // Given
+                var fixture = new APTPackageInstallerFixture();
+                fixture.Package = new PackageReference("apt:?package=xcowsay&dist=stable");
+
+                // When
+                var result = fixture.GetArguments().Render();
+
+                // Then
+                Assert.Equal("install -y xcowsay/stable", result);
+            }
+
+            [Fact]
+            public void Should_Use_Release_Option() {
+                // Given
+                var fixture = new APTPackageInstallerFixture();
+                fixture.Package = new PackageReference("apt:?package=xcowsay&release=xenial");
+
+                // When
+                var result = fixture.GetArguments();
+
+                // Then
+                Assert.Contains(result, a => a.Render() == "-t=xenial");
+            }
+
+            [Fact]
+            public void Should_Include_Version() {
+                // Given
+                var fixture = new APTPackageInstallerFixture();
+                fixture.Package = new PackageReference("apt:?package=xcowsay&version=1.1.0");
+
+                // When
+                var result = fixture.GetArguments().Render();
+
+                // Then
+                Assert.Equal("install -y xcowsay=1.1.0", result);
             }
         }
     }

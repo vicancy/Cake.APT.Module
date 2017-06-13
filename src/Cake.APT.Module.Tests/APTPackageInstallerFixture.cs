@@ -70,5 +70,11 @@ namespace Cake.APT.Module.Tests
             var installer = CreateInstaller();
             return installer.CanInstall(Package, PackageType);
         }
+
+        internal ProcessArgumentBuilder GetArguments()
+        {
+            var installer = CreateInstaller();
+            return installer.GetArguments(Package, Config);
+        }
     }
 }

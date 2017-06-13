@@ -128,7 +128,6 @@ Task("Post-Build")
 	.Does(() =>
 {
 	CreateDirectory(artifacts + "build");
-	CreateDirectory(artifacts + "modules");
 	foreach (var project in projects.SourceProjects) {
 		CreateDirectory(artifacts + "build/" + project.Name);
 		foreach (var framework in frameworks) {
@@ -191,6 +190,6 @@ Task("NuGet")
 });
 
 Task("Default")
-	.IsDependentOn("Post-Build");
+	.IsDependentOn("NuGet");
 
 RunTarget(target);

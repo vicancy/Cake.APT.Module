@@ -94,7 +94,13 @@ namespace Cake.APT.Module
             return result;
         }
 
-        private ProcessArgumentBuilder GetArguments(
+        /// <summary>
+        /// Gets the arguments to invoke apt-get for the current install.
+        /// </summary>
+        /// <param name="definition">The package definition to install.</param>
+        /// <param name="config">The current configuration.</param>
+        /// <returns>Process arguments for apt-get.</returns>
+        public ProcessArgumentBuilder GetArguments(
             PackageReference definition,
             ICakeConfiguration config)
         {
