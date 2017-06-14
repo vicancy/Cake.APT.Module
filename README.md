@@ -10,7 +10,7 @@ APT is a simple and powerful package manager designed to work with DPKG/DEB-base
 |Status|`develop`|`master`|
 |:---:|:---:|:---:|
 |Build|![develop](https://vs01.visualstudio.com/_apis/public/build/definitions/09d675bd-0b92-45dc-8a6c-f8c4976b4ef0/36/badge)|![master](https://vs01.visualstudio.com/_apis/public/build/definitions/09d675bd-0b92-45dc-8a6c-f8c4976b4ef0/33/badge)|
-|NuGet|![stable](https://img.shields.io/nuget/v/Cake.APT.Module.svg)|![prerelease](https://img.shields.io/nuget/vpre/Cake.APT.Module.svg)|
+|NuGet|![prerelease](https://img.shields.io/nuget/vpre/Cake.APT.Module.svg)|![stable](https://img.shields.io/nuget/v/Cake.APT.Module.svg)|
 
 ## Documentation
 
